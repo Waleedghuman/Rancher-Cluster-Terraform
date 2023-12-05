@@ -1,6 +1,4 @@
 
-variable "aws_access_key" {}
-variable "aws_secret_key" {}
 # Masters module
 module "masters" {
   source                      = "./ec2"
@@ -14,6 +12,7 @@ module "masters" {
   vpc_security_group_ids      = [module.networking.sg_id]
   ami                         = var.ami
   ebs_volume                  = var.ebs_volume_size_masters
+  # enable_eip    = each.value == 0 ? true : false # just attach eip on master-1
 }
 
 # Workers module
@@ -29,6 +28,7 @@ module "workers" {
   vpc_security_group_ids      = [module.networking.sg_id]
   ami                         = var.ami
   ebs_volume                  = var.ebs_volume_size_workers
+  # enable_eip    = false # don't attach eip
 }
 
 locals {
@@ -45,8 +45,8 @@ locals {
 
 resource "aws_route53_record" "main" {
   count   = var.rancher_masters_count != 0 ? 1 : 0
-  zone_id = "Z02745981J3FQC8Y0Z4P7"
-  name    = "waleed"
+  zone_id = "Z02745981J3FQC8Y0Z4P7" # teus1.awssolutionprovider.com
+  name    = var.tags.Owner
   type    = "A"
   ttl     = 300
   records = [module.masters["master0"].public_ip]
@@ -79,8 +79,6 @@ resource "null_resource" "remote_exec_master0" {
     ]
   }
 }
-
-
 resource "null_resource" "remote_exec_masters" {
   count = var.rancher_masters_count > 1 ? var.rancher_masters_count - 1 : 0 # Exclude the first machine
 
@@ -133,6 +131,38 @@ resource "null_resource" "remote_exec_workers" {
     ]
   }
 }
+
+resource "null_resource" "remote_exec_rancher" {
+  count = var.rancher_masters_count != 0 ? 1 : 0
+
+  connection {
+    host        = module.masters["master0"].public_ip
+    type        = "ssh"
+    user        = var.ssh_user
+    private_key = file(var.private_key_path)
+  }
+
+  provisioner "file" {
+    source      = "scripts/rancher.sh"
+    destination = "/tmp/install_rancher.sh"
+  }
+
+  # Collect dependencies into a flat list
+  depends_on = [null_resource.remote_exec_master0[1], null_resource.remote_exec_master0[2], null_resource.remote_exec_workers[0], null_resource.remote_exec_workers[1], null_resource.remote_exec_workers[2]]
+  provisioner "remote-exec" {
+    inline = [
+      "set -e",
+      "echo 'Waiting for cloud-init to complete...'",
+      "until sudo cloud-init status --wait > /dev/null 2>&1; do sleep 1; done",
+      "echo 'Completed cloud-init!'",
+      "sudo bash /tmp/install_rancher.sh '${aws_route53_record.main[0].fqdn}'",
+      "sleep 10",
+      "exit",
+    ]
+  }
+}
+
+
 # Retrieve the token using an external data source
 data "external" "get_token" {
   count = var.rancher_masters_count != 0 ? 1 : 0

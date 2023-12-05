@@ -17,3 +17,6 @@ output "hostname" {
 output "ami_id" {
   value = data.aws_ami.main.image_id
 }
+# output "dns" {
+#   value = aws_route53_record.main[0].fqdn
+# }

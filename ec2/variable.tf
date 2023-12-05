@@ -43,6 +43,7 @@ variable "enable_eip" {
   description = "Set to true to allocate an Elastic IP, or false to not allocate one"
   type        = bool
   default     = false
+  # default     = true
 }
 
 variable "eip_domain" {
