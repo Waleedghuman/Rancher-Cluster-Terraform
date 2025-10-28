@@ -51,11 +51,11 @@ variable "ssh_user" {
 }
 
 variable "private_key_path" {
-  default = "./../id_rsa"
+  default = "~/.ssh/id_rsa"
 }
 
 variable "public_key_path" {
-  default = "./../id_rsa.pub"
+  default = "~/.ssh/id_rsa.pub"
 }
 
 variable "ami" {
